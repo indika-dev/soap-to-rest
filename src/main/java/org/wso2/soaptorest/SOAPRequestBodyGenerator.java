@@ -1,19 +1,16 @@
 /*
  * Copyright (c) 2022, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
- * WSO2 Inc. licenses this file to you under the Apache License,
- * Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License.
- * You may obtain a copy of the License at
+ * WSO2 Inc. licenses this file to you under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You may obtain a copy of the License
+ * at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
  */
 package org.wso2.soaptorest;
 
@@ -61,151 +58,153 @@ import io.swagger.v3.oas.models.parameters.QueryParameter;
  */
 public class SOAPRequestBodyGenerator {
 
-    private static final Logger log = LoggerFactory.getLogger(SOAPRequestBodyGenerator.class);
-    private static String soapMessageType = SOAPToRESTConstants.EMPTY_STRING;
-    private static String soapStyle = SOAPToRESTConstants.EMPTY_STRING;
+  private static final Logger log = LoggerFactory.getLogger(SOAPRequestBodyGenerator.class);
+  private static String soapMessageType = SOAPToRESTConstants.EMPTY_STRING;
+  private static String soapStyle = SOAPToRESTConstants.EMPTY_STRING;
 
-    /**
-     * Generates {@link SOAPtoRESTConversionData} with a map of SOAP payloads with JSON paths of REST payloads for
-     * all generated REST endpoint. Mapping is done using Operation ID of REST service.
-     *
-     * @param openAPI open api definition of api
-     * @return SOAPtoRESTConversionData Object that represent the OpenAPI with SOAP payloads which are needed
-     * for SOAP backend calls
-     * @throws SOAPToRESTException throws {@link SOAPToRESTException} if exception occur while generating SOAP
-     *                             payloads
-     */
-    public static SOAPtoRESTConversionData generateSOAPtoRESTConversionObjectFromOAS(OpenAPI openAPI,
-                                                                                     String soapService,
-                                                                                     String soapPort) throws
-            SOAPToRESTException {
+  /**
+   * Generates {@link SOAPtoRESTConversionData} with a map of SOAP payloads with JSON paths of REST
+   * payloads for all generated REST endpoint. Mapping is done using Operation ID of REST service.
+   *
+   * @param openAPI open api definition of api
+   * @return SOAPtoRESTConversionData Object that represent the OpenAPI with SOAP payloads which are
+   *         needed for SOAP backend calls
+   * @throws SOAPToRESTException throws {@link SOAPToRESTException} if exception occur while
+   *         generating SOAP payloads
+   */
+  public static SOAPtoRESTConversionData generateSOAPtoRESTConversionObjectFromOAS(OpenAPI openAPI,
+      String soapService, String soapPort) throws SOAPToRESTException {
 
-        Map<String, SOAPRequestElement> requestBodies = new HashMap<>();
-        Paths paths = openAPI.getPaths();
+    Map<String, SOAPRequestElement> requestBodies = new HashMap<>();
+    Paths paths = openAPI.getPaths();
 
-        // Configure serializers
-        SimpleModule simpleModule = new SimpleModule().addSerializer(new JsonNodeExampleSerializer());
-        Json.mapper().registerModule(simpleModule);
-        Yaml.mapper().registerModule(simpleModule);
-        Map<String,String> jsonPathAndSchemaMap = new HashMap<>();
+    // Configure serializers
+    SimpleModule simpleModule = new SimpleModule().addSerializer(new JsonNodeExampleSerializer());
+    Json.mapper().registerModule(simpleModule);
+    Yaml.mapper().registerModule(simpleModule);
+    Map<String, String> jsonPathAndSchemaMap = new HashMap<>();
 
-        for (String pathName : paths.keySet()) {
-            PathItem path = paths.get(pathName);
-            List<Operation> operationMap = path.readOperations();
-            for (Operation operation : operationMap) {
-                ArrayList<String> parameterJsonPathMapping = new ArrayList<>();
-                Map<String, String> queryParameters = new HashMap<>();
-                String operationId = operation.getOperationId();
+    for (String pathName : paths.keySet()) {
+      PathItem path = paths.get(pathName);
+      List<Operation> operationMap = path.readOperations();
+      for (Operation operation : operationMap) {
+        ArrayList<String> parameterJsonPathMapping = new ArrayList<>();
+        Map<String, String> queryParameters = new HashMap<>();
+        String operationId = operation.getOperationId();
 
-                //get vendor extensions
-                Map<String, Object> vendorExtensions = operation.getExtensions();
-                Object vendorExtensionObj = vendorExtensions.get(SOAPToRESTConstants.WSO2_SOAP);
+        // get vendor extensions
+        Map<String, Object> vendorExtensions = operation.getExtensions();
+        Object vendorExtensionObj = vendorExtensions.get(SOAPToRESTConstants.WSO2_SOAP);
 
-                String soapAction = SOAPToRESTConstants.EMPTY_STRING;
-                String namespace = SOAPToRESTConstants.EMPTY_STRING;
-                String soapVersion = SOAPToRESTConstants.EMPTY_STRING;
-                if (vendorExtensionObj != null) {
-                    soapAction =
-                            (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.SOAP_ACTION);
-                    namespace =
-                            (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.NAMESPACE);
-                    soapVersion =
-                            (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.SOAP_VERSION);
-                    soapMessageType =
-                            (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.SOAP_MESSAGE_TYPE);
-                    soapStyle =
-                            (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.SOAP_STYLE);
-                }
-                String soapNamespace = SOAPToRESTConstants.SOAP12_NAMESPACE;
-                if (StringUtils.isNotBlank(soapVersion) && SOAPToRESTConstants.SOAP_VERSION_11.equals(soapVersion)) {
-                    soapNamespace = SOAPToRESTConstants.SOAP11_NAMESPACE;
-                }
-
-                List<Parameter> parameters = operation.getParameters();
-
-                if (parameters != null) {
-                    for (Parameter parameter : parameters) {
-                        String name = parameter.getName();
-
-                        if (parameter instanceof QueryParameter) {
-                            String type = parameter.getSchema().getType();
-                            queryParameters.put(name, type);
-                        }
-                    }
-                } else {
-                    try {
-                        Schema<?> model =
-                                operation.getRequestBody().getContent().get(SOAPToRESTConstants.
-                                        DEFAULT_CONTENT_TYPE).getSchema();
-                        Example example = ExampleBuilder.fromSchema(model, openAPI.getComponents().getSchemas());
-                        parameterJsonPathMapping = ListJSONPaths.getJsonPathsFromExample(example, jsonPathAndSchemaMap);
-                    } catch (Exception e) {
-                        throw new SOAPToRESTException("Cannot generate JSON body from the OpenAPI", e);
-                    }
-
-                }
-
-                Document soapRequestBody = createSOAPRequestXMLForOperation(parameterJsonPathMapping, queryParameters,
-                        namespace, operationId, openAPI, jsonPathAndSchemaMap );
-
-                iterateChildNodes(soapRequestBody.getDocumentElement(), soapRequestBody);
-                requestBodies.put(operationId, new SOAPRequestElement(soapRequestBody, soapAction, namespace,
-                        soapNamespace));
-            }
+        String soapAction = SOAPToRESTConstants.EMPTY_STRING;
+        String namespace = SOAPToRESTConstants.EMPTY_STRING;
+        String soapVersion = SOAPToRESTConstants.EMPTY_STRING;
+        if (vendorExtensionObj != null) {
+          soapAction =
+              (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.SOAP_ACTION);
+          namespace =
+              (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.NAMESPACE);
+          soapVersion =
+              (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.SOAP_VERSION);
+          soapMessageType = (String) ((HashMap<?, ?>) vendorExtensionObj)
+              .get(SOAPToRESTConstants.SOAP_MESSAGE_TYPE);
+          soapStyle =
+              (String) ((HashMap<?, ?>) vendorExtensionObj).get(SOAPToRESTConstants.SOAP_STYLE);
         }
-        return new SOAPtoRESTConversionData(openAPI, requestBodies, soapService, soapPort);
-    }
-
-    /**
-     * Iterate through the given document and wrap the possible empty elements with <#if> statements.
-     * @param node      Current node
-     * @param document  Root document
-     */
-    private static void iterateChildNodes(Node node, Document document) {
-        // Get the child nodes of the current node
-        NodeList childNodes = node.getChildNodes();
-
-        // Iterate over the child nodes
-        for (int i = 0; i < childNodes.getLength(); i++) {
-            Node childNode = childNodes.item(i);
-
-            // Check if the element has the attribute "addIsEmptyCheck" with value "true"
-            if (childNode instanceof Element) {
-                Element element = (Element) childNode;
-                if (element.hasAttribute(IS_EMPTY_ATTRIBUTE) &&
-                        element.getAttribute(IS_EMPTY_ATTRIBUTE).equals("true")) {
-                    // Create a new element <#if>
-                    String value = null;
-                    if (element.hasAttribute(VALUE_ATTRIBUTE)) {
-                        String nodeName = element.getNodeName();
-                        // remove namespace from the node name
-                        if (nodeName.contains(":")) {
-                            nodeName = nodeName.split(":")[1];
-                        }
-                        value = "${payload." + element.getAttribute(VALUE_ATTRIBUTE) + "." + nodeName + "}";
-                        element.removeAttribute(VALUE_ATTRIBUTE);
-                    }
-                    element.removeAttribute(IS_EMPTY_ATTRIBUTE);
-
-                    Element newElement = document.createElement(IF_PLACEHOLDER);
-                    // remove ${} from the value and append has_content check
-                    newElement.setAttribute(ATTRIBUTE_PLACEHOLDER, value.substring(2, value.length() - 1) +
-                            QUESTION_MARK_PLACEHOLDER + "has_content");
-
-                    Node parentNode = element.getParentNode();
-                    parentNode.replaceChild(newElement, element);
-                    newElement.appendChild(element);
-
-                    iterateChildNodes(newElement, document);
-                } else {
-                    iterateChildNodes(element, document);
-                }
-            } else {
-                iterateChildNodes(childNode, document);
-            }
+        String soapNamespace = SOAPToRESTConstants.SOAP12_NAMESPACE;
+        if (StringUtils.isNotBlank(soapVersion)
+            && SOAPToRESTConstants.SOAP_VERSION_11.equals(soapVersion)) {
+          soapNamespace = SOAPToRESTConstants.SOAP11_NAMESPACE;
         }
+
+        List<Parameter> parameters = operation.getParameters();
+
+        if (parameters != null) {
+          for (Parameter parameter : parameters) {
+            String name = parameter.getName();
+
+            if (parameter instanceof QueryParameter) {
+              String type = parameter.getSchema().getType();
+              queryParameters.put(name, type);
+            }
+          }
+        } else {
+          try {
+            Schema<?> model = operation.getRequestBody().getContent()
+                .get(SOAPToRESTConstants.DEFAULT_CONTENT_TYPE).getSchema();
+            Example example =
+                ExampleBuilder.fromSchema(model, openAPI.getComponents().getSchemas());
+            parameterJsonPathMapping =
+                ListJSONPaths.getJsonPathsFromExample(example, jsonPathAndSchemaMap);
+          } catch (Exception e) {
+            throw new SOAPToRESTException("Cannot generate JSON body from the OpenAPI", e);
+          }
+
+        }
+
+        Document soapRequestBody = createSOAPRequestXMLForOperation(parameterJsonPathMapping,
+            queryParameters, namespace, operationId, openAPI, jsonPathAndSchemaMap);
+
+        iterateChildNodes(soapRequestBody.getDocumentElement(), soapRequestBody);
+        requestBodies.put(operationId,
+            new SOAPRequestElement(soapRequestBody, soapAction, namespace, soapNamespace));
+      }
     }
-    private static Document createSOAPRequestXMLForOperation(ArrayList<String> parameterJsonPathMapping, Map<String,
+    return new SOAPtoRESTConversionData(openAPI, requestBodies, soapService, soapPort);
+  }
+
+  /**
+   * Iterate through the given document and wrap the possible empty elements with <#if> statements.
+   * 
+   * @param node Current node
+   * @param document Root document
+   */
+  private static void iterateChildNodes(Node node, Document document) {
+    // Get the child nodes of the current node
+    NodeList childNodes = node.getChildNodes();
+
+    // Iterate over the child nodes
+    for (int i = 0; i < childNodes.getLength(); i++) {
+      Node childNode = childNodes.item(i);
+
+      // Check if the element has the attribute "addIsEmptyCheck" with value "true"
+      if (childNode instanceof Element) {
+        Element element = (Element) childNode;
+        if (element.hasAttribute(IS_EMPTY_ATTRIBUTE)
+            && element.getAttribute(IS_EMPTY_ATTRIBUTE).equals("true")) {
+          // Create a new element <#if>
+          String value = null;
+          if (element.hasAttribute(VALUE_ATTRIBUTE)) {
+            String nodeName = element.getNodeName();
+            // remove namespace from the node name
+            if (nodeName.contains(":")) {
+              nodeName = nodeName.split(":")[1];
+            }
+            value = "${payload." + element.getAttribute(VALUE_ATTRIBUTE) + "." + nodeName + "}";
+            element.removeAttribute(VALUE_ATTRIBUTE);
+          }
+          element.removeAttribute(IS_EMPTY_ATTRIBUTE);
+
+          Element newElement = document.createElement(IF_PLACEHOLDER);
+          // remove ${} from the value and append has_content check
+          newElement.setAttribute(ATTRIBUTE_PLACEHOLDER,
+              value.substring(2, value.length() - 1) + QUESTION_MARK_PLACEHOLDER + "has_content");
+
+          Node parentNode = element.getParentNode();
+          parentNode.replaceChild(newElement, element);
+          newElement.appendChild(element);
+
+          iterateChildNodes(newElement, document);
+        } else {
+          iterateChildNodes(element, document);
+        }
+      } else {
+        iterateChildNodes(childNode, document);
+      }
+    }
+  }
+
+  private static Document createSOAPRequestXMLForOperation(ArrayList<String> parameterJsonPathMapping, Map<String,
             String> queryPathParamMapping, String namespace, String operationId, OpenAPI openAPI,
             Map<String,String> jsonPathAndSchemaMap) throws SOAPToRESTException {
 
@@ -283,7 +282,11 @@ public class SOAPRequestBodyGenerator {
                             }
                             mapKey = mapKey.substring(0, endIndex);
                             parentSchema = openAPI.getComponents().getSchemas().get(jsonPathAndSchemaMap.get(mapKey));
-                            String parentKey = mapKey.substring(0, mapKey.lastIndexOf('.'));
+                            endIndex = mapKey.lastIndexOf('.');
+                            if (endIndex == -1) {
+                              endIndex = mapKey.length();
+                            }
+                            String parentKey = mapKey.substring(0, endIndex);
                             if (!StringUtils.isEmpty(parentKey)) {
                                 Schema<?> enclosingSchema = openAPI.getComponents().getSchemas()
                                         .get(jsonPathAndSchemaMap.get(parentKey));
@@ -401,31 +404,31 @@ public class SOAPRequestBodyGenerator {
         return doc;
     }
 
-    private static String getXpath(Node node) {
+  private static String getXpath(Node node) {
 
-        if (node != null) {
-            Node parent = node.getParentNode();
-            if (parent == null && node.getLocalName() != null) {
-                return node.getLocalName();
-            } else if (node.getLocalName() != null) {
-                return getXpath(parent) + SOAPToRESTConstants.PATH_SEPARATOR + node.getLocalName();
-            } else {
-                return getXpath(parent);
-            }
-        }
-        return SOAPToRESTConstants.EMPTY_STRING;
+    if (node != null) {
+      Node parent = node.getParentNode();
+      if (parent == null && node.getLocalName() != null) {
+        return node.getLocalName();
+      } else if (node.getLocalName() != null) {
+        return getXpath(parent) + SOAPToRESTConstants.PATH_SEPARATOR + node.getLocalName();
+      } else {
+        return getXpath(parent);
+      }
     }
+    return SOAPToRESTConstants.EMPTY_STRING;
+  }
 
-    /**
-     * Escape the FreeMarker template. Since FreeMarker 2.3.22 the variable name can also contain minus (-), dot (.)
-     * , and colon (:) at any position, but these must be escaped with a preceding backslash (\)
-     *
-     * @param template free marker template
-     * @return escaped template
-     */
-    private static String escapeFreeMarkerTemplate(String template) {
+  /**
+   * Escape the FreeMarker template. Since FreeMarker 2.3.22 the variable name can also contain
+   * minus (-), dot (.) , and colon (:) at any position, but these must be escaped with a preceding
+   * backslash (\)
+   *
+   * @param template free marker template
+   * @return escaped template
+   */
+  private static String escapeFreeMarkerTemplate(String template) {
 
-        return template.replace("-", "\\-").replace(".", "\\.")
-                .replace(":", "\\:");
-    }
+    return template.replace("-", "\\-").replace(".", "\\.").replace(":", "\\:");
+  }
 }
