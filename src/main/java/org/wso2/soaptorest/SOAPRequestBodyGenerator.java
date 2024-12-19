@@ -17,6 +17,31 @@
  */
 package org.wso2.soaptorest;
 
+import static org.wso2.soaptorest.utils.SOAPToRESTConstants.ATTRIBUTE_PLACEHOLDER;
+import static org.wso2.soaptorest.utils.SOAPToRESTConstants.IF_PLACEHOLDER;
+import static org.wso2.soaptorest.utils.SOAPToRESTConstants.IS_EMPTY_ATTRIBUTE;
+import static org.wso2.soaptorest.utils.SOAPToRESTConstants.QUESTION_MARK_PLACEHOLDER;
+import static org.wso2.soaptorest.utils.SOAPToRESTConstants.VALUE_ATTRIBUTE;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.wso2.soaptorest.exceptions.SOAPToRESTException;
+import org.wso2.soaptorest.models.SOAPRequestElement;
+import org.wso2.soaptorest.models.SOAPtoRESTConversionData;
+import org.wso2.soaptorest.utils.ListJSONPaths;
+import org.wso2.soaptorest.utils.SOAPToRESTConstants;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import io.swagger.oas.inflector.examples.ExampleBuilder;
 import io.swagger.oas.inflector.examples.models.Example;
@@ -30,33 +55,6 @@ import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.parameters.QueryParameter;
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.wso2.soaptorest.exceptions.SOAPToRESTException;
-import org.wso2.soaptorest.models.SOAPRequestElement;
-import org.wso2.soaptorest.models.SOAPtoRESTConversionData;
-import org.wso2.soaptorest.utils.ListJSONPaths;
-import org.wso2.soaptorest.utils.SOAPToRESTConstants;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.wso2.soaptorest.utils.SOAPToRESTConstants.ATTRIBUTE_PLACEHOLDER;
-import static org.wso2.soaptorest.utils.SOAPToRESTConstants.IF_PLACEHOLDER;
-import static org.wso2.soaptorest.utils.SOAPToRESTConstants.IS_EMPTY_ATTRIBUTE;
-import static org.wso2.soaptorest.utils.SOAPToRESTConstants.QUESTION_MARK_PLACEHOLDER;
-import static org.wso2.soaptorest.utils.SOAPToRESTConstants.VALUE_ATTRIBUTE;
 
 /**
  * Class that reads OpenAPI and generate soap request payloads
@@ -279,6 +277,12 @@ public class SOAPRequestBodyGenerator {
                         parentSchema = openAPI.getComponents().getSchemas().get(jsonPathAndSchemaMap.get(mapKey));
                         if (parentSchema == null) {
                             // check for the schema inside parent object's schema
+                            int endIndex = mapKey.lastIndexOf('.');
+                            if (endIndex == -1) {
+                              endIndex = mapKey.length();
+                            }
+                            mapKey = mapKey.substring(0, endIndex);
+                            parentSchema = openAPI.getComponents().getSchemas().get(jsonPathAndSchemaMap.get(mapKey));
                             String parentKey = mapKey.substring(0, mapKey.lastIndexOf('.'));
                             if (!StringUtils.isEmpty(parentKey)) {
                                 Schema<?> enclosingSchema = openAPI.getComponents().getSchemas()
